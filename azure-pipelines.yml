@@ -1,0 +1,47 @@
+trigger:
+  - main
+
+pool:
+  vmImage: ubuntu-latest
+
+variables:
+  storageAccountName: 'stordemoacct'
+  resourceGroupName: 'demo-rg'
+  location: 'australiaeast'
+
+stages:
+  - stage: Terraform
+    displayName: "Terraform Apply"
+    jobs:
+      - job: TerraformJob
+        steps:
+          - checkout: self
+
+          - task: UseTerraform@0
+            inputs:
+              terraformVersion: '1.7.5'
+
+          - script: |
+              terraform init
+              terraform apply -auto-approve
+            displayName: "Run Terraform"
+
+  - stage: UploadStaticWebsite
+    displayName: "Upload Website Files"
+    dependsOn: Terraform
+    jobs:
+      - job: UploadJob
+        steps:
+          - checkout: self
+
+          - task: AzureCLI@2
+            inputs:
+              azureSubscription: 'AzureServiceConnection'  # Update to match your Azure DevOps service connection
+              scriptType: 'bash'
+              scriptLocation: 'inlineScript'
+              inlineScript: |
+                az storage blob upload-batch \
+                  --account-name $(storageAccountName) \
+                  --destination '$web' \
+                  --source ./website-files \
+                  --auth-mode login
